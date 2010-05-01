@@ -90,80 +90,83 @@ function CPU(nes) {
         this.palCnt = 0;
     }
     
-    
     // Emulates a single CPU instruction, returns the number of cycles
-    this.emulate = function() {
-        var temp;
-        var add;
-        
-        // Check interrupts:
-        if(this.irqRequested){
-            temp =
-                (this.F_CARRY)|
-                ((this.F_ZERO===0?1:0)<<1)|
-                (this.F_INTERRUPT<<2)|
-                (this.F_DECIMAL<<3)|
-                (this.F_BRK<<4)|
-                (this.F_NOTUSED<<5)|
-                (this.F_OVERFLOW<<6)|
-                (this.F_SIGN<<7);
+    var temp, add, opinf, cycleCount, cycleAdd, addrMode, opaddr, addr;
 
-            this.REG_PC_NEW = this.REG_PC;
-            this.F_INTERRUPT_NEW = this.F_INTERRUPT;
-            switch(this.irqType){
+    this.emulate = function() {
+        var self = this;
+        //var temp;
+        //var add;
+
+        // Check interrupts:
+        if(self.irqRequested){
+            temp =
+                (self.F_CARRY)|
+                ((self.F_ZERO===0?1:0)<<1)|
+                (self.F_INTERRUPT<<2)|
+                (self.F_DECIMAL<<3)|
+                (self.F_BRK<<4)|
+                (self.F_NOTUSED<<5)|
+                (self.F_OVERFLOW<<6)|
+                (self.F_SIGN<<7);
+
+            self.REG_PC_NEW = self.REG_PC;
+            self.F_INTERRUPT_NEW = self.F_INTERRUPT;
+            switch(self.irqType){
                 case 0: {
                     // Normal IRQ:
-                    if(this.F_INTERRUPT!=0){
+                    if(self.F_INTERRUPT!=0){
                         ////System.out.println("Interrupt was masked.");
                         break;
                     }
                     doIrq(temp);
-                    ////System.out.println("Did normal IRQ. I="+this.F_INTERRUPT);
+                    ////System.out.println("Did normal IRQ. I="+self.F_INTERRUPT);
                     break;
                 }case 1:{
                     // NMI:
-                    this.doNonMaskableInterrupt(temp);
+                    self.doNonMaskableInterrupt(temp);
                     break;
 
                 }case 2:{
                     // Reset:
-                    this.doResetInterrupt();
+                    self.doResetInterrupt();
                     break;
                 }
             }
 
-            this.REG_PC = this.REG_PC_NEW;
-            this.F_INTERRUPT = this.F_INTERRUPT_NEW;
-            this.F_BRK = this.F_BRK_NEW;
-            this.irqRequested = false;
+            self.REG_PC = self.REG_PC_NEW;
+            self.F_INTERRUPT = self.F_INTERRUPT_NEW;
+            self.F_BRK = self.F_BRK_NEW;
+            self.irqRequested = false;
         }
 
-        var opinf = this.opdata[this.mmap.load(this.REG_PC+1)];
-        var cycleCount = (opinf>>24);
-        var cycleAdd = 0;
+        opinf = self.opdata[self.mmap.load(self.REG_PC+1)];
+        cycleCount = (opinf>>24);
+        cycleAdd = 0;
+        //var cycleAdd = 0;
 
         // Find address mode:
-        var addrMode = (opinf>>8)&0xFF;
+        addrMode = (opinf>>8)&0xFF;
 
         // Increment PC by number of op bytes:
-        var opaddr = this.REG_PC;
-        this.REG_PC+=((opinf>>16)&0xFF);
-        
-        var addr=0;
+        opaddr = self.REG_PC;
+        self.REG_PC+=((opinf>>16)&0xFF);
+
+        addr=0;
         switch(addrMode){
             case 0:{
                 // Zero Page mode. Use the address given after the opcode, 
                 // but without high byte.
-                addr = this.load(opaddr+2);
+                addr = self.load(opaddr+2);
                 break;
 
             }case 1:{
                 // Relative mode.
-                addr = this.load(opaddr+2);
+                addr = self.load(opaddr+2);
                 if(addr<0x80){
-                    addr += this.REG_PC;
+                    addr += self.REG_PC;
                 }else{
-                    addr += this.REG_PC-256;
+                    addr += self.REG_PC-256;
                 }
                 break;
             }case 2:{
@@ -172,59 +175,59 @@ function CPU(nes) {
             }case 3:{
                 // Absolute mode. Use the two bytes following the opcode as 
                 // an address.
-                addr = this.load16bit(opaddr+2);
+                addr = self.load16bit(opaddr+2);
                 break;
             }case 4:{
                 // Accumulator mode. The address is in the accumulator 
                 // register.
-                addr = this.REG_ACC;
+                addr = self.REG_ACC;
                 break;
             }case 5:{
                 // Immediate mode. The value is given after the opcode.
-                addr = this.REG_PC;
+                addr = self.REG_PC;
                 break;
             }case 6:{
                 // Zero Page Indexed mode, X as index. Use the address given 
                 // after the opcode, then add the
                 // X register to it to get the final address.
-                addr = (this.load(opaddr+2)+this.REG_X)&0xFF;
+                addr = (self.load(opaddr+2)+self.REG_X)&0xFF;
                 break;
             }case 7:{
                 // Zero Page Indexed mode, Y as index. Use the address given 
                 // after the opcode, then add the
                 // Y register to it to get the final address.
-                addr = (this.load(opaddr+2)+this.REG_Y)&0xFF;
+                addr = (self.load(opaddr+2)+self.REG_Y)&0xFF;
                 break;
             }case 8:{
                 // Absolute Indexed Mode, X as index. Same as zero page 
                 // indexed, but with the high byte.
-                addr = this.load16bit(opaddr+2);
-                if((addr&0xFF00)!=((addr+this.REG_X)&0xFF00)){
+                addr = self.load16bit(opaddr+2);
+                if((addr&0xFF00)!=((addr+self.REG_X)&0xFF00)){
                     cycleAdd = 1;
                 }
-                addr+=this.REG_X;
+                addr+=self.REG_X;
                 break;
             }case 9:{
                 // Absolute Indexed Mode, Y as index. Same as zero page 
                 // indexed, but with the high byte.
-                addr = this.load16bit(opaddr+2);
-                if((addr&0xFF00)!=((addr+this.REG_Y)&0xFF00)){
+                addr = self.load16bit(opaddr+2);
+                if((addr&0xFF00)!=((addr+self.REG_Y)&0xFF00)){
                     cycleAdd = 1;
                 }
-                addr+=this.REG_Y;
+                addr+=self.REG_Y;
                 break;
             }case 10:{
                 // Pre-indexed Indirect mode. Find the 16-bit address 
                 // starting at the given location plus
                 // the current X register. The value is the contents of that 
                 // address.
-                addr = this.load(opaddr+2);
-                if((addr&0xFF00)!=((addr+this.REG_X)&0xFF00)){
+                addr = self.load(opaddr+2);
+                if((addr&0xFF00)!=((addr+self.REG_X)&0xFF00)){
                     cycleAdd = 1;
                 }
-                addr+=this.REG_X;
+                addr+=self.REG_X;
                 addr&=0xFF;
-                addr = this.load16bit(addr);
+                addr = self.load16bit(addr);
                 break;
             }case 11:{
                 // Post-indexed Indirect mode. Find the 16-bit address 
@@ -232,20 +235,20 @@ function CPU(nes) {
                 // (and the one following). Add to that address the contents 
                 // of the Y register. Fetch the value
                 // stored at that adress.
-                addr = this.load16bit(this.load(opaddr+2));
-                if((addr&0xFF00)!=((addr+this.REG_Y)&0xFF00)){
+                addr = self.load16bit(self.load(opaddr+2));
+                if((addr&0xFF00)!=((addr+self.REG_Y)&0xFF00)){
                     cycleAdd = 1;
                 }
-                addr+=this.REG_Y;
+                addr+=self.REG_Y;
                 break;
             }case 12:{
                 // Indirect Absolute mode. Find the 16-bit address contained 
                 // at the given location.
-                addr = this.load16bit(opaddr+2);// Find op
+                addr = self.load16bit(opaddr+2);// Find op
                 if(addr < 0x1FFF){
-                    addr = this.nes.cpuMem[addr] + (this.nes.cpuMem[(addr&0xFF00)|(((addr&0xFF)+1)&0xFF)]<<8);// Read from address given in op
+                    addr = self.nes.cpuMem[addr] + (self.nes.cpuMem[(addr&0xFF00)|(((addr&0xFF)+1)&0xFF)]<<8);// Read from address given in op
                 }else{
-                    addr = this.mmap.load(addr)+(this.mmap.load((addr&0xFF00)|(((addr&0xFF)+1)&0xFF))<<8);
+                    addr = self.mmap.load(addr)+(self.mmap.load((addr&0xFF00)|(((addr&0xFF)+1)&0xFF))<<8);
                 }
                 break;
 
@@ -267,12 +270,12 @@ function CPU(nes) {
                 // *******
 
                 // Add with carry.
-                temp = this.REG_ACC + this.load(addr) + this.F_CARRY;
-                this.F_OVERFLOW = ((!(((this.REG_ACC ^ this.load(addr)) & 0x80)!=0) && (((this.REG_ACC ^ temp) & 0x80))!=0)?1:0);
-                this.F_CARRY = (temp>255?1:0);
-                this.F_SIGN = (temp>>7)&1;
-                this.F_ZERO = temp&0xFF;
-                this.REG_ACC = (temp&255);
+                temp = self.REG_ACC + self.load(addr) + self.F_CARRY;
+                self.F_OVERFLOW = ((!(((self.REG_ACC ^ self.load(addr)) & 0x80)!=0) && (((self.REG_ACC ^ temp) & 0x80))!=0)?1:0);
+                self.F_CARRY = (temp>255?1:0);
+                self.F_SIGN = (temp>>7)&1;
+                self.F_ZERO = temp&0xFF;
+                self.REG_ACC = (temp&255);
                 cycleCount+=cycleAdd;
                 break;
 
@@ -282,10 +285,10 @@ function CPU(nes) {
                 // *******
 
                 // AND memory with accumulator.
-                this.REG_ACC = this.REG_ACC & this.load(addr);
-                this.F_SIGN = (this.REG_ACC>>7)&1;
-                this.F_ZERO = this.REG_ACC;
-                //this.REG_ACC = temp;
+                self.REG_ACC = self.REG_ACC & self.load(addr);
+                self.F_SIGN = (self.REG_ACC>>7)&1;
+                self.F_ZERO = self.REG_ACC;
+                //self.REG_ACC = temp;
                 if(addrMode!=11)cycleCount+=cycleAdd; // PostIdxInd = 11
                 break;
             }case 2:{
@@ -296,19 +299,19 @@ function CPU(nes) {
                 // Shift left one bit
                 if(addrMode == 4){ // ADDR_ACC = 4
 
-                    this.F_CARRY = (this.REG_ACC>>7)&1;
-                    this.REG_ACC = (this.REG_ACC<<1)&255;
-                    this.F_SIGN = (this.REG_ACC>>7)&1;
-                    this.F_ZERO = this.REG_ACC;
+                    self.F_CARRY = (self.REG_ACC>>7)&1;
+                    self.REG_ACC = (self.REG_ACC<<1)&255;
+                    self.F_SIGN = (self.REG_ACC>>7)&1;
+                    self.F_ZERO = self.REG_ACC;
 
                 }else{
 
-                    temp = this.load(addr);
-                    this.F_CARRY = (temp>>7)&1;
+                    temp = self.load(addr);
+                    self.F_CARRY = (temp>>7)&1;
                     temp = (temp<<1)&255;
-                    this.F_SIGN = (temp>>7)&1;
-                    this.F_ZERO = temp;
-                    this.write(addr, temp);
+                    self.F_SIGN = (temp>>7)&1;
+                    self.F_ZERO = temp;
+                    self.write(addr, temp);
 
                 }
                 break;
@@ -320,9 +323,9 @@ function CPU(nes) {
                 // *******
 
                 // Branch on carry clear
-                if(this.F_CARRY == 0){
+                if(self.F_CARRY == 0){
                     cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-                    this.REG_PC = addr;
+                    self.REG_PC = addr;
                 }
                 break;
 
@@ -333,9 +336,9 @@ function CPU(nes) {
                 // *******
 
                 // Branch on carry set
-                if(this.F_CARRY == 1){
+                if(self.F_CARRY == 1){
                     cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-                    this.REG_PC = addr;
+                    self.REG_PC = addr;
                 }
                 break;
 
@@ -346,9 +349,9 @@ function CPU(nes) {
                 // *******
 
                 // Branch on zero
-                if(this.F_ZERO == 0){
+                if(self.F_ZERO == 0){
                     cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-                    this.REG_PC = addr;
+                    self.REG_PC = addr;
                 }
                 break;
 
@@ -358,11 +361,11 @@ function CPU(nes) {
                 // * BIT *
                 // *******
 
-                temp = this.load(addr);
-                this.F_SIGN = (temp>>7)&1;
-                this.F_OVERFLOW = (temp>>6)&1;
-                temp &= this.REG_ACC;
-                this.F_ZERO = temp;
+                temp = self.load(addr);
+                self.F_SIGN = (temp>>7)&1;
+                self.F_OVERFLOW = (temp>>6)&1;
+                temp &= self.REG_ACC;
+                self.F_ZERO = temp;
                 break;
 
             }case 7:{
@@ -372,9 +375,9 @@ function CPU(nes) {
                 // *******
 
                 // Branch on negative result
-                if(this.F_SIGN == 1){
+                if(self.F_SIGN == 1){
                     cycleCount++;
-                    this.REG_PC = addr;
+                    self.REG_PC = addr;
                 }
                 break;
 
@@ -385,9 +388,9 @@ function CPU(nes) {
                 // *******
 
                 // Branch on not zero
-                if(this.F_ZERO != 0){
+                if(self.F_ZERO != 0){
                     cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-                    this.REG_PC = addr;
+                    self.REG_PC = addr;
                 }
                 break;
 
@@ -398,9 +401,9 @@ function CPU(nes) {
                 // *******
 
                 // Branch on positive result
-                if(this.F_SIGN == 0){
+                if(self.F_SIGN == 0){
                     cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-                    this.REG_PC = addr;
+                    self.REG_PC = addr;
                 }
                 break;
 
@@ -410,26 +413,26 @@ function CPU(nes) {
                 // * BRK *
                 // *******
 
-                this.REG_PC+=2;
-                this.push((this.REG_PC>>8)&255);
-                this.push(this.REG_PC&255);
-                this.F_BRK = 1;
+                self.REG_PC+=2;
+                self.push((self.REG_PC>>8)&255);
+                self.push(self.REG_PC&255);
+                self.F_BRK = 1;
 
-                this.push(
-                    (this.F_CARRY)|
-                    ((this.F_ZERO==0?1:0)<<1)|
-                    (this.F_INTERRUPT<<2)|
-                    (this.F_DECIMAL<<3)|
-                    (this.F_BRK<<4)|
-                    (this.F_NOTUSED<<5)|
-                    (this.F_OVERFLOW<<6)|
-                    (this.F_SIGN<<7)
+                self.push(
+                    (self.F_CARRY)|
+                    ((self.F_ZERO==0?1:0)<<1)|
+                    (self.F_INTERRUPT<<2)|
+                    (self.F_DECIMAL<<3)|
+                    (self.F_BRK<<4)|
+                    (self.F_NOTUSED<<5)|
+                    (self.F_OVERFLOW<<6)|
+                    (self.F_SIGN<<7)
                 );
 
-                this.F_INTERRUPT = 1;
-                //this.REG_PC = load(0xFFFE) | (load(0xFFFF) << 8);
-                this.REG_PC = this.load16bit(0xFFFE);
-                this.REG_PC--;
+                self.F_INTERRUPT = 1;
+                //self.REG_PC = load(0xFFFE) | (load(0xFFFF) << 8);
+                self.REG_PC = self.load16bit(0xFFFE);
+                self.REG_PC--;
                 break;
 
             }case 11:{
@@ -439,9 +442,9 @@ function CPU(nes) {
                 // *******
 
                 // Branch on overflow clear
-                if(this.F_OVERFLOW == 0){
+                if(self.F_OVERFLOW == 0){
                     cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-                    this.REG_PC = addr;
+                    self.REG_PC = addr;
                 }
                 break;
 
@@ -452,9 +455,9 @@ function CPU(nes) {
                 // *******
 
                 // Branch on overflow set
-                if(this.F_OVERFLOW == 1){
+                if(self.F_OVERFLOW == 1){
                     cycleCount += ((opaddr&0xFF00)!=(addr&0xFF00)?2:1);
-                    this.REG_PC = addr;
+                    self.REG_PC = addr;
                 }
                 break;
 
@@ -465,7 +468,7 @@ function CPU(nes) {
                 // *******
 
                 // Clear carry flag
-                this.F_CARRY = 0;
+                self.F_CARRY = 0;
                 break;
 
             }case 14:{
@@ -475,7 +478,7 @@ function CPU(nes) {
                 // *******
 
                 // Clear decimal flag
-                this.F_DECIMAL = 0;
+                self.F_DECIMAL = 0;
                 break;
 
             }case 15:{
@@ -485,7 +488,7 @@ function CPU(nes) {
                 // *******
 
                 // Clear interrupt flag
-                this.F_INTERRUPT = 0;
+                self.F_INTERRUPT = 0;
                 break;
 
             }case 16:{
@@ -495,7 +498,7 @@ function CPU(nes) {
                 // *******
 
                 // Clear overflow flag
-                this.F_OVERFLOW = 0;
+                self.F_OVERFLOW = 0;
                 break;
 
             }case 17:{
@@ -505,10 +508,10 @@ function CPU(nes) {
                 // *******
 
                 // Compare memory and accumulator:
-                temp = this.REG_ACC - this.load(addr);
-                this.F_CARRY = (temp>=0?1:0);
-                this.F_SIGN = (temp>>7)&1;
-                this.F_ZERO = temp&0xFF;
+                temp = self.REG_ACC - self.load(addr);
+                self.F_CARRY = (temp>=0?1:0);
+                self.F_SIGN = (temp>>7)&1;
+                self.F_ZERO = temp&0xFF;
                 cycleCount+=cycleAdd;
                 break;
 
@@ -519,10 +522,10 @@ function CPU(nes) {
                 // *******
 
                 // Compare memory and index X:
-                temp = this.REG_X - this.load(addr);
-                this.F_CARRY = (temp>=0?1:0);
-                this.F_SIGN = (temp>>7)&1;
-                this.F_ZERO = temp&0xFF;
+                temp = self.REG_X - self.load(addr);
+                self.F_CARRY = (temp>=0?1:0);
+                self.F_SIGN = (temp>>7)&1;
+                self.F_ZERO = temp&0xFF;
                 break;
 
             }case 19:{
@@ -532,10 +535,10 @@ function CPU(nes) {
                 // *******
 
                 // Compare memory and index Y:
-                temp = this.REG_Y - this.load(addr);
-                this.F_CARRY = (temp>=0?1:0);
-                this.F_SIGN = (temp>>7)&1;
-                this.F_ZERO = temp&0xFF;
+                temp = self.REG_Y - self.load(addr);
+                self.F_CARRY = (temp>=0?1:0);
+                self.F_SIGN = (temp>>7)&1;
+                self.F_ZERO = temp&0xFF;
                 break;
 
             }case 20:{
@@ -545,10 +548,10 @@ function CPU(nes) {
                 // *******
 
                 // Decrement memory by one:
-                temp = (this.load(addr)-1)&0xFF;
-                this.F_SIGN = (temp>>7)&1;
-                this.F_ZERO = temp;
-                this.write(addr, temp);
+                temp = (self.load(addr)-1)&0xFF;
+                self.F_SIGN = (temp>>7)&1;
+                self.F_ZERO = temp;
+                self.write(addr, temp);
                 break;
 
             }case 21:{
@@ -558,9 +561,9 @@ function CPU(nes) {
                 // *******
 
                 // Decrement index X by one:
-                this.REG_X = (this.REG_X-1)&0xFF;
-                this.F_SIGN = (this.REG_X>>7)&1;
-                this.F_ZERO = this.REG_X;
+                self.REG_X = (self.REG_X-1)&0xFF;
+                self.F_SIGN = (self.REG_X>>7)&1;
+                self.F_ZERO = self.REG_X;
                 break;
 
             }case 22:{
@@ -570,9 +573,9 @@ function CPU(nes) {
                 // *******
 
                 // Decrement index Y by one:
-                this.REG_Y = (this.REG_Y-1)&0xFF;
-                this.F_SIGN = (this.REG_Y>>7)&1;
-                this.F_ZERO = this.REG_Y;
+                self.REG_Y = (self.REG_Y-1)&0xFF;
+                self.F_SIGN = (self.REG_Y>>7)&1;
+                self.F_ZERO = self.REG_Y;
                 break;
 
             }case 23:{
@@ -582,9 +585,9 @@ function CPU(nes) {
                 // *******
 
                 // XOR Memory with accumulator, store in accumulator:
-                this.REG_ACC = (this.load(addr)^this.REG_ACC)&0xFF;
-                this.F_SIGN = (this.REG_ACC>>7)&1;
-                this.F_ZERO = this.REG_ACC;
+                self.REG_ACC = (self.load(addr)^self.REG_ACC)&0xFF;
+                self.F_SIGN = (self.REG_ACC>>7)&1;
+                self.F_ZERO = self.REG_ACC;
                 cycleCount+=cycleAdd;
                 break;
 
@@ -595,10 +598,10 @@ function CPU(nes) {
                 // *******
 
                 // Increment memory by one:
-                temp = (this.load(addr)+1)&0xFF;
-                this.F_SIGN = (temp>>7)&1;
-                this.F_ZERO = temp;
-                this.write(addr, temp&0xFF);
+                temp = (self.load(addr)+1)&0xFF;
+                self.F_SIGN = (temp>>7)&1;
+                self.F_ZERO = temp;
+                self.write(addr, temp&0xFF);
                 break;
 
             }case 25:{
@@ -608,9 +611,9 @@ function CPU(nes) {
                 // *******
 
                 // Increment index X by one:
-                this.REG_X = (this.REG_X+1)&0xFF;
-                this.F_SIGN = (this.REG_X>>7)&1;
-                this.F_ZERO = this.REG_X;
+                self.REG_X = (self.REG_X+1)&0xFF;
+                self.F_SIGN = (self.REG_X>>7)&1;
+                self.F_ZERO = self.REG_X;
                 break;
 
             }case 26:{
@@ -620,10 +623,10 @@ function CPU(nes) {
                 // *******
 
                 // Increment index Y by one:
-                this.REG_Y++;
-                this.REG_Y &= 0xFF;
-                this.F_SIGN = (this.REG_Y>>7)&1;
-                this.F_ZERO = this.REG_Y;
+                self.REG_Y++;
+                self.REG_Y &= 0xFF;
+                self.F_SIGN = (self.REG_Y>>7)&1;
+                self.F_ZERO = self.REG_Y;
                 break;
 
             }case 27:{
@@ -633,7 +636,7 @@ function CPU(nes) {
                 // *******
 
                 // Jump to new location:
-                this.REG_PC = addr-1;
+                self.REG_PC = addr-1;
                 break;
 
             }case 28:{
@@ -644,9 +647,9 @@ function CPU(nes) {
 
                 // Jump to new location, saving return address.
                 // Push return address on stack:
-                this.push((this.REG_PC>>8)&255);
-                this.push(this.REG_PC&255);
-                this.REG_PC = addr-1;
+                self.push((self.REG_PC>>8)&255);
+                self.push(self.REG_PC&255);
+                self.REG_PC = addr-1;
                 break;
 
             }case 29:{
@@ -656,9 +659,9 @@ function CPU(nes) {
                 // *******
 
                 // Load accumulator with memory:
-                this.REG_ACC = this.load(addr);
-                this.F_SIGN = (this.REG_ACC>>7)&1;
-                this.F_ZERO = this.REG_ACC;
+                self.REG_ACC = self.load(addr);
+                self.F_SIGN = (self.REG_ACC>>7)&1;
+                self.F_ZERO = self.REG_ACC;
                 cycleCount+=cycleAdd;
                 break;
 
@@ -669,9 +672,9 @@ function CPU(nes) {
                 // *******
 
                 // Load index X with memory:
-                this.REG_X = this.load(addr);
-                this.F_SIGN = (this.REG_X>>7)&1;
-                this.F_ZERO = this.REG_X;
+                self.REG_X = self.load(addr);
+                self.F_SIGN = (self.REG_X>>7)&1;
+                self.F_ZERO = self.REG_X;
                 cycleCount+=cycleAdd;
                 break;
 
@@ -682,9 +685,9 @@ function CPU(nes) {
                 // *******
 
                 // Load index Y with memory:
-                this.REG_Y = this.load(addr);
-                this.F_SIGN = (this.REG_Y>>7)&1;
-                this.F_ZERO = this.REG_Y;
+                self.REG_Y = self.load(addr);
+                self.F_SIGN = (self.REG_Y>>7)&1;
+                self.F_ZERO = self.REG_Y;
                 cycleCount+=cycleAdd;
                 break;
 
@@ -697,21 +700,21 @@ function CPU(nes) {
                 // Shift right one bit:
                 if(addrMode == 4){ // ADDR_ACC
 
-                    temp = (this.REG_ACC & 0xFF);
-                    this.F_CARRY = temp&1;
+                    temp = (self.REG_ACC & 0xFF);
+                    self.F_CARRY = temp&1;
                     temp >>= 1;
-                    this.REG_ACC = temp;
+                    self.REG_ACC = temp;
 
                 }else{
 
-                    temp = this.load(addr) & 0xFF;
-                    this.F_CARRY = temp&1;
+                    temp = self.load(addr) & 0xFF;
+                    self.F_CARRY = temp&1;
                     temp >>= 1;
-                    this.write(addr, temp);
+                    self.write(addr, temp);
 
                 }
-                this.F_SIGN = 0;
-                this.F_ZERO = temp;
+                self.F_SIGN = 0;
+                self.F_ZERO = temp;
                 break;
 
             }case 33:{
@@ -731,10 +734,10 @@ function CPU(nes) {
                 // *******
 
                 // OR memory with accumulator, store in accumulator.
-                temp = (this.load(addr)|this.REG_ACC)&255;
-                this.F_SIGN = (temp>>7)&1;
-                this.F_ZERO = temp;
-                this.REG_ACC = temp;
+                temp = (self.load(addr)|self.REG_ACC)&255;
+                self.F_SIGN = (temp>>7)&1;
+                self.F_ZERO = temp;
+                self.REG_ACC = temp;
                 if(addrMode!=11)cycleCount+=cycleAdd; // PostIdxInd = 11
                 break;
 
@@ -745,7 +748,7 @@ function CPU(nes) {
                 // *******
 
                 // Push accumulator on stack
-                this.push(this.REG_ACC);
+                self.push(self.REG_ACC);
                 break;
 
             }case 36:{
@@ -755,16 +758,16 @@ function CPU(nes) {
                 // *******
 
                 // Push processor status on stack
-                this.F_BRK = 1;
-                this.push(
-                    (this.F_CARRY)|
-                    ((this.F_ZERO==0?1:0)<<1)|
-                    (this.F_INTERRUPT<<2)|
-                    (this.F_DECIMAL<<3)|
-                    (this.F_BRK<<4)|
-                    (this.F_NOTUSED<<5)|
-                    (this.F_OVERFLOW<<6)|
-                    (this.F_SIGN<<7)
+                self.F_BRK = 1;
+                self.push(
+                    (self.F_CARRY)|
+                    ((self.F_ZERO==0?1:0)<<1)|
+                    (self.F_INTERRUPT<<2)|
+                    (self.F_DECIMAL<<3)|
+                    (self.F_BRK<<4)|
+                    (self.F_NOTUSED<<5)|
+                    (self.F_OVERFLOW<<6)|
+                    (self.F_SIGN<<7)
                 );
                 break;
 
@@ -775,9 +778,9 @@ function CPU(nes) {
                 // *******
 
                 // Pull accumulator from stack
-                this.REG_ACC = this.pull();
-                this.F_SIGN = (this.REG_ACC>>7)&1;
-                this.F_ZERO = this.REG_ACC;
+                self.REG_ACC = self.pull();
+                self.F_SIGN = (self.REG_ACC>>7)&1;
+                self.F_ZERO = self.REG_ACC;
                 break;
 
             }case 38:{
@@ -787,17 +790,17 @@ function CPU(nes) {
                 // *******
 
                 // Pull processor status from stack
-                temp = this.pull();
-                this.F_CARRY     = (temp   )&1;
-                this.F_ZERO      = (((temp>>1)&1)==1)?0:1;
-                this.F_INTERRUPT = (temp>>2)&1;
-                this.F_DECIMAL   = (temp>>3)&1;
-                this.F_BRK       = (temp>>4)&1;
-                this.F_NOTUSED   = (temp>>5)&1;
-                this.F_OVERFLOW  = (temp>>6)&1;
-                this.F_SIGN      = (temp>>7)&1;
+                temp = self.pull();
+                self.F_CARRY     = (temp   )&1;
+                self.F_ZERO      = (((temp>>1)&1)==1)?0:1;
+                self.F_INTERRUPT = (temp>>2)&1;
+                self.F_DECIMAL   = (temp>>3)&1;
+                self.F_BRK       = (temp>>4)&1;
+                self.F_NOTUSED   = (temp>>5)&1;
+                self.F_OVERFLOW  = (temp>>6)&1;
+                self.F_SIGN      = (temp>>7)&1;
 
-                this.F_NOTUSED = 1;
+                self.F_NOTUSED = 1;
                 break;
 
             }case 39:{
@@ -809,23 +812,23 @@ function CPU(nes) {
                 // Rotate one bit left
                 if(addrMode == 4){ // ADDR_ACC = 4
 
-                    temp = this.REG_ACC;
-                    add = this.F_CARRY;
-                    this.F_CARRY = (temp>>7)&1;
+                    temp = self.REG_ACC;
+                    add = self.F_CARRY;
+                    self.F_CARRY = (temp>>7)&1;
                     temp = ((temp<<1)&0xFF)+add;
-                    this.REG_ACC = temp;
+                    self.REG_ACC = temp;
 
                 }else{
 
-                    temp = this.load(addr);
-                    add = this.F_CARRY;
-                    this.F_CARRY = (temp>>7)&1;
+                    temp = self.load(addr);
+                    add = self.F_CARRY;
+                    self.F_CARRY = (temp>>7)&1;
                     temp = ((temp<<1)&0xFF)+add;    
-                    this.write(addr, temp);
+                    self.write(addr, temp);
 
                 }
-                this.F_SIGN = (temp>>7)&1;
-                this.F_ZERO = temp;
+                self.F_SIGN = (temp>>7)&1;
+                self.F_ZERO = temp;
                 break;
 
             }case 40:{
@@ -837,22 +840,22 @@ function CPU(nes) {
                 // Rotate one bit right
                 if(addrMode == 4){ // ADDR_ACC = 4
 
-                    add = this.F_CARRY<<7;
-                    this.F_CARRY = this.REG_ACC&1;
-                    temp = (this.REG_ACC>>1)+add;   
-                    this.REG_ACC = temp;
+                    add = self.F_CARRY<<7;
+                    self.F_CARRY = self.REG_ACC&1;
+                    temp = (self.REG_ACC>>1)+add;   
+                    self.REG_ACC = temp;
 
                 }else{
 
-                    temp = this.load(addr);
-                    add = this.F_CARRY<<7;
-                    this.F_CARRY = temp&1;
+                    temp = self.load(addr);
+                    add = self.F_CARRY<<7;
+                    self.F_CARRY = temp&1;
                     temp = (temp>>1)+add;
-                    this.write(addr, temp);
+                    self.write(addr, temp);
 
                 }
-                this.F_SIGN = (temp>>7)&1;
-                this.F_ZERO = temp;
+                self.F_SIGN = (temp>>7)&1;
+                self.F_ZERO = temp;
                 break;
 
             }case 41:{
@@ -862,24 +865,24 @@ function CPU(nes) {
                 // *******
 
                 // Return from interrupt. Pull status and PC from stack.
-                
-                temp = this.pull();
-                this.F_CARRY     = (temp   )&1;
-                this.F_ZERO      = ((temp>>1)&1)==0?1:0;
-                this.F_INTERRUPT = (temp>>2)&1;
-                this.F_DECIMAL   = (temp>>3)&1;
-                this.F_BRK       = (temp>>4)&1;
-                this.F_NOTUSED   = (temp>>5)&1;
-                this.F_OVERFLOW  = (temp>>6)&1;
-                this.F_SIGN      = (temp>>7)&1;
 
-                this.REG_PC = this.pull();
-                this.REG_PC += (this.pull()<<8);
-                if(this.REG_PC==0xFFFF){
+                temp = self.pull();
+                self.F_CARRY     = (temp   )&1;
+                self.F_ZERO      = ((temp>>1)&1)==0?1:0;
+                self.F_INTERRUPT = (temp>>2)&1;
+                self.F_DECIMAL   = (temp>>3)&1;
+                self.F_BRK       = (temp>>4)&1;
+                self.F_NOTUSED   = (temp>>5)&1;
+                self.F_OVERFLOW  = (temp>>6)&1;
+                self.F_SIGN      = (temp>>7)&1;
+
+                self.REG_PC = self.pull();
+                self.REG_PC += (self.pull()<<8);
+                if(self.REG_PC==0xFFFF){
                     return;
                 }
-                this.REG_PC--;
-                this.F_NOTUSED = 1;
+                self.REG_PC--;
+                self.F_NOTUSED = 1;
                 break;
 
             }case 42:{
@@ -889,11 +892,11 @@ function CPU(nes) {
                 // *******
 
                 // Return from subroutine. Pull PC from stack.
-                
-                this.REG_PC = this.pull();
-                this.REG_PC += (this.pull()<<8);
-                
-                if(this.REG_PC==0xFFFF){
+
+                self.REG_PC = self.pull();
+                self.REG_PC += (self.pull()<<8);
+
+                if(self.REG_PC==0xFFFF){
                     return; // return from NSF play routine:
                 }
                 break;
@@ -904,12 +907,12 @@ function CPU(nes) {
                 // * SBC *
                 // *******
 
-                temp = this.REG_ACC-this.load(addr)-(1-this.F_CARRY);
-                this.F_SIGN = (temp>>7)&1;
-                this.F_ZERO = temp&0xFF;
-                this.F_OVERFLOW = ((((this.REG_ACC^temp)&0x80)!=0 && ((this.REG_ACC^this.load(addr))&0x80)!=0)?1:0);
-                this.F_CARRY = (temp<0?0:1);
-                this.REG_ACC = (temp&0xFF);
+                temp = self.REG_ACC-self.load(addr)-(1-self.F_CARRY);
+                self.F_SIGN = (temp>>7)&1;
+                self.F_ZERO = temp&0xFF;
+                self.F_OVERFLOW = ((((self.REG_ACC^temp)&0x80)!=0 && ((self.REG_ACC^self.load(addr))&0x80)!=0)?1:0);
+                self.F_CARRY = (temp<0?0:1);
+                self.REG_ACC = (temp&0xFF);
                 if(addrMode!=11)cycleCount+=cycleAdd; // PostIdxInd = 11
                 break;
 
@@ -920,7 +923,7 @@ function CPU(nes) {
                 // *******
 
                 // Set carry flag
-                this.F_CARRY = 1;
+                self.F_CARRY = 1;
                 break;
 
             }case 45:{
@@ -930,7 +933,7 @@ function CPU(nes) {
                 // *******
 
                 // Set decimal mode
-                this.F_DECIMAL = 1;
+                self.F_DECIMAL = 1;
                 break;
 
             }case 46:{
@@ -940,7 +943,7 @@ function CPU(nes) {
                 // *******
 
                 // Set interrupt disable status
-                this.F_INTERRUPT = 1;
+                self.F_INTERRUPT = 1;
                 break;
 
             }case 47:{
@@ -950,7 +953,7 @@ function CPU(nes) {
                 // *******
 
                 // Store accumulator in memory
-                this.write(addr, this.REG_ACC);
+                self.write(addr, self.REG_ACC);
                 break;
 
             }case 48:{
@@ -960,7 +963,7 @@ function CPU(nes) {
                 // *******
 
                 // Store index X in memory
-                this.write(addr, this.REG_X);
+                self.write(addr, self.REG_X);
                 break;
 
             }case 49:{
@@ -970,7 +973,7 @@ function CPU(nes) {
                 // *******
 
                 // Store index Y in memory:
-                this.write(addr, this.REG_Y);
+                self.write(addr, self.REG_Y);
                 break;
 
             }case 50:{
@@ -980,9 +983,9 @@ function CPU(nes) {
                 // *******
 
                 // Transfer accumulator to index X:
-                this.REG_X = this.REG_ACC;
-                this.F_SIGN = (this.REG_ACC>>7)&1;
-                this.F_ZERO = this.REG_ACC;
+                self.REG_X = self.REG_ACC;
+                self.F_SIGN = (self.REG_ACC>>7)&1;
+                self.F_ZERO = self.REG_ACC;
                 break;
 
             }case 51:{
@@ -992,9 +995,9 @@ function CPU(nes) {
                 // *******
 
                 // Transfer accumulator to index Y:
-                this.REG_Y = this.REG_ACC;
-                this.F_SIGN = (this.REG_ACC>>7)&1;
-                this.F_ZERO = this.REG_ACC;
+                self.REG_Y = self.REG_ACC;
+                self.F_SIGN = (self.REG_ACC>>7)&1;
+                self.F_ZERO = self.REG_ACC;
                 break;
 
             }case 52:{
@@ -1004,9 +1007,9 @@ function CPU(nes) {
                 // *******
 
                 // Transfer stack pointer to index X:
-                this.REG_X = (this.REG_SP-0x0100);
-                this.F_SIGN = (this.REG_SP>>7)&1;
-                this.F_ZERO = this.REG_X;
+                self.REG_X = (self.REG_SP-0x0100);
+                self.F_SIGN = (self.REG_SP>>7)&1;
+                self.F_ZERO = self.REG_X;
                 break;
 
             }case 53:{
@@ -1016,9 +1019,9 @@ function CPU(nes) {
                 // *******
 
                 // Transfer index X to accumulator:
-                this.REG_ACC = this.REG_X;
-                this.F_SIGN = (this.REG_X>>7)&1;
-                this.F_ZERO = this.REG_X;
+                self.REG_ACC = self.REG_X;
+                self.F_SIGN = (self.REG_X>>7)&1;
+                self.F_ZERO = self.REG_X;
                 break;
 
             }case 54:{
@@ -1028,8 +1031,8 @@ function CPU(nes) {
                 // *******
 
                 // Transfer index X to stack pointer:
-                this.REG_SP = (this.REG_X+0x0100);
-                this.stackWrap();
+                self.REG_SP = (self.REG_X+0x0100);
+                self.stackWrap();
                 break;
 
             }case 55:{
@@ -1039,9 +1042,9 @@ function CPU(nes) {
                 // *******
 
                 // Transfer index Y to accumulator:
-                this.REG_ACC = this.REG_Y;
-                this.F_SIGN = (this.REG_Y>>7)&1;
-                this.F_ZERO = this.REG_Y;
+                self.REG_ACC = self.REG_Y;
+                self.F_SIGN = (self.REG_Y>>7)&1;
+                self.F_ZERO = self.REG_Y;
                 break;
 
             }default:{
@@ -1050,8 +1053,8 @@ function CPU(nes) {
                 // * ??? *
                 // *******
 
-                this.nes.stop();
-                this.nes.crashMessage = "Game crashed, invalid opcode at address $"+opaddr.toString(16);
+                self.nes.stop();
+                self.nes.crashMessage = "Game crashed, invalid opcode at address $"+opaddr.toString(16);
                 break;
 
             }
@@ -1063,9 +1066,9 @@ function CPU(nes) {
 
         /* This isn't set anywhere
         if(Globals.palEmulation){
-            this.palCnt++;
-            if(this.palCnt==5){
-                this.palCnt=0;
+            self.palCnt++;
+            if(self.palCnt==5){
+                self.palCnt=0;
                 cycleCount++;
             }
         }*/

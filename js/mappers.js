@@ -11,7 +11,6 @@ function MapperDefault(nes) {
     this.mouseY = null;
     
     this.tmp = null;
-    
 }
 
 MapperDefault.prototype.write = function(address, value){
@@ -45,55 +44,11 @@ MapperDefault.prototype.write = function(address, value){
     
 }
 
+
 MapperDefault.prototype.load = function(address){
-    
-    // Game Genie codes active?
-    /*if(this.gameGenieActive){
-        if(this.nes.gameGenie.addressMatch[address]){
-            
-            tmp = nes.gameGenie.getCodeIndex(address);
-            
-            // Check the code type:
-            if(nes.gameGenie.getCodeType(tmp) == GameGenie.TYPE_6CHAR){
-                
-                // Return the code value:
-                return (short)nes.gameGenie.getCodeValue(tmp);
-                
-            }else{
-                
-                // Check whether the actual value equals the compare value:
-                if(nes.cpuMem[address] == nes.gameGenie.getCodeCompare(tmp)){
-                    
-                    // The values match, so use the supplied game genie value:
-                    return (short)nes.gameGenie.getCodeValue(tmp);
-                    
-                }
-                
-            }
-        }
-    }*/
-    
-    // Wrap around:
-    address &= 0xFFFF;
-    
-    // Check address range:
-    if(address > 0x4017){
-        
-        // ROM:
-        return this.nes.cpuMem[address];
-                
-    }else if(address >= 0x2000){
-        
-        // I/O Ports.
-        return this.regLoad(address);
-        
-    }else{
-        
-        // RAM (mirrored)
-        return this.nes.cpuMem[address&0x7FF];
-        
-    }
-    
+  address &= 0xFFFF;
+  return address < 0x2000 ? this.nes.cpuMem[address&0x7FF] :
+    address <= 0x4017 ? this.regLoad(address) : this.nes.cpuMem[address];
 }
 
 MapperDefault.prototype.regLoad = function(address){
@@ -573,6 +528,14 @@ MapperDefault.prototype.reset = function(){
 function Mapper001(nes) {
     this.nes = nes
     
+    var cpuMem = nes.cpuMem;
+    
+    this.load = function(address){
+      address &= 0xFFFF;
+      return address < 0x2000 ? cpuMem[address&0x7FF] :
+        address <= 0x4017 ? this.regLoad(address) : cpuMem[address];
+    }
+    
     // Register flags:
     
     // Register 0:
@@ -878,7 +841,14 @@ Mapper001.prototype.switch32to16 = function(){
 }
 
 function Mapper002(nes) {
-    this.nes = nes
+    this.nes = nes;
+    var cpuMem = nes.cpuMem;
+    
+    this.load = function(address){
+      address &= 0xFFFF;
+      return address < 0x2000 ? cpuMem[address&0x7FF] :
+        address <= 0x4017 ? this.regLoad(address) : cpuMem[address];
+    }
 }
 
 copyPrototype(Mapper002, MapperDefault);
@@ -921,6 +891,13 @@ Mapper002.prototype.loadROM = function(rom){
 
 function Mapper004(nes) {
     this.nes = nes
+    var cpuMem = nes.cpuMem;
+    
+    this.load = function(address){
+      address &= 0xFFFF;
+      return address < 0x2000 ? cpuMem[address&0x7FF] :
+        address <= 0x4017 ? this.regLoad(address) : cpuMem[address];
+    }
     
     this.CMD_SEL_2_1K_VROM_0000 = 0;
 	this.CMD_SEL_2_1K_VROM_0800 = 1;
